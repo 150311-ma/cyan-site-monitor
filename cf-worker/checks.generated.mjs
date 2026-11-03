@@ -1,7 +1,7 @@
 // ⚠️ 本文件由 sync-worker-checks.mjs 自动生成，别手改。
-// 真相源：仓库根目录 checks.json（tier=core 的项）
-// 生成时间：2026-11-03T12:34:48.706Z
-// 检查项数：31
+// 真相源：仓库根目录 checks.json
+// 生成时间：2026-11-03T12:57:12.020Z
+// CORE 31 项（每分钟） / DEEP 28 项（每 10 分钟那一轮顺带跑）
 export const CHECKS = [
   {"id":"a-01","group":"a","groupName":"网站服务状态","name":"入口站首页（根域）","method":"GET","url":"https://xn--7qv00lf62c.top/","expectStatus":[200],"bodyContains":["李海鼎"]},
   {"id":"a-02","group":"a","groupName":"网站服务状态","name":"博客首页 HTML","method":"GET","url":"https://blog.xn--7qv00lf62c.top/","expectStatus":[200],"bodyContains":["<!doctype html"]},
@@ -34,4 +34,35 @@ export const CHECKS = [
   {"id":"f-05","group":"f","groupName":"网站各平台状态","name":"网盘域名设置 /api/repo-settings（未登录应 401）","method":"GET","url":"https://blog.xn--7qv00lf62c.top/api/repo-settings","expectStatus":[401],"jsonEquals":{"ok":false}},
   {"id":"f-06","group":"f","groupName":"网站各平台状态","name":"网盘配额 /api/repo-quota（未登录应 401）","method":"GET","url":"https://blog.xn--7qv00lf62c.top/api/repo-quota","expectStatus":[401],"jsonEquals":{"ok":false}},
   {"id":"f-07","group":"f","groupName":"网站各平台状态","name":"网盘类型清单 /api/repo-exts（未登录应 401）","method":"GET","url":"https://blog.xn--7qv00lf62c.top/api/repo-exts","expectStatus":[401],"jsonEquals":{"ok":false}}
+];
+
+export const DEEP_CHECKS = [
+  {"id":"b-03","group":"b","groupName":"密钥校验状态","name":"激活码格式校验（坏格式应 400/bad_format）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/license/verify","expectStatus":[400],"jsonEquals":{"ok":false,"code":"bad_format"},"jsonBody":{"key":"ATB1-INVALID-0000-0000"}},
+  {"id":"b-04","group":"b","groupName":"密钥校验状态","name":"Ed25519 验签在位（伪签名应 403/bad_signature）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/license/verify","expectStatus":[403],"jsonEquals":{"ok":false,"code":"bad_signature"},"jsonBody":{"key":"ATB1.eyJ0ZXN0Ijp0cnVlfQ.AAAA"}},
+  {"id":"c-07","group":"c","groupName":"博客服务状态","name":"RSS /rss.xml","method":"GET","url":"https://blog.xn--7qv00lf62c.top/rss.xml","expectStatus":[200],"bodyContains":["<rss"]},
+  {"id":"c-08","group":"c","groupName":"博客服务状态","name":"AI 接入文档 /ai-api.md","method":"GET","url":"https://blog.xn--7qv00lf62c.top/ai-api.md","expectStatus":[200],"bodyContains":["/api/license/verify"]},
+  {"id":"c-09","group":"c","groupName":"博客服务状态","name":"llms.txt","method":"GET","url":"https://blog.xn--7qv00lf62c.top/llms.txt","expectStatus":[200]},
+  {"id":"d-04","group":"d","groupName":"管理员平台状态","name":"后台编辑器页 /_admin/edit","method":"GET","url":"https://blog.xn--7qv00lf62c.top/_admin/edit","expectStatus":[200],"bodyContains":["<!doctype html"]},
+  {"id":"d-05","group":"d","groupName":"管理员平台状态","name":"后台站点设置页 /_admin/site","method":"GET","url":"https://blog.xn--7qv00lf62c.top/_admin/site","expectStatus":[200],"bodyContains":["<!doctype html"]},
+  {"id":"e-02","group":"e","groupName":"密码校验状态","name":"登录密码校验在跑（错误凭据应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/auth/login","expectStatus":[401],"jsonEquals":{"ok":false},"bodyContains":["密码"],"jsonBody":{"username":"__uptime_probe__","password":"__not_a_real_password__"}},
+  {"id":"e-04","group":"e","groupName":"密码校验状态","name":"访问密码闸门 /_access","method":"GET","url":"https://blog.xn--7qv00lf62c.top/_access","expectStatus":[200,302,303,307,308]},
+  {"id":"b-06","group":"b","groupName":"密钥校验状态","name":"吊销接口鉴权 POST（未登录应 401/403）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/license/revoke","expectStatus":[401,403],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-12","group":"c","groupName":"博客服务状态","name":"留言提交参数校验（空内容应 400）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/mail-forward","expectStatus":[400],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-13","group":"c","groupName":"博客服务状态","name":"重发留言鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/mail-forward/retry","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-14","group":"c","groupName":"博客服务状态","name":"删除留言鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/mail-forward/delete","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-15","group":"c","groupName":"博客服务状态","name":"留言自检鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/mail-forward/selftest","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-16","group":"c","groupName":"博客服务状态","name":"新建文章鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/posts","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-17","group":"c","groupName":"博客服务状态","name":"站点配置写入鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/site-config","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-18","group":"c","groupName":"博客服务状态","name":"关于页写入鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/about","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"d-07","group":"d","groupName":"管理员平台状态","name":"停用/启用账号鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/user-status","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"e-08","group":"e","groupName":"密码校验状态","name":"注册参数校验（空 body 应 400）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/auth/register","expectStatus":[400],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"e-09","group":"e","groupName":"密码校验状态","name":"注销幂等（空 body 应 200）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/auth/logout","expectStatus":[200],"jsonEquals":{"ok":true},"jsonBody":{}},
+  {"id":"e-10","group":"e","groupName":"密码校验状态","name":"上传鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/upload","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"e-11","group":"e","groupName":"密码校验状态","name":"SSO 票据兑换参数校验（无票据应 400）","method":"GET","url":"https://blog.xn--7qv00lf62c.top/api/sso/claim","expectStatus":[400],"jsonEquals":{"ok":false}},
+  {"id":"f-08","group":"f","groupName":"网站各平台状态","name":"删除文件鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/upload-delete","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"f-09","group":"f","groupName":"网站各平台状态","name":"网盘新建条目鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/repo","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"f-10","group":"f","groupName":"网站各平台状态","name":"网盘改/删条目鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/repo/__uptime_probe__","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"f-11","group":"f","groupName":"网站各平台状态","name":"分片上传鉴权（未登录应 401）","method":"POST","url":"https://blog.xn--7qv00lf62c.top/api/repo-chunk","expectStatus":[401],"jsonEquals":{"ok":false},"jsonBody":{}},
+  {"id":"c-19","group":"c","groupName":"博客服务状态","name":"站点地图 /sitemap-index.xml","method":"GET","url":"https://blog.xn--7qv00lf62c.top/sitemap-index.xml","expectStatus":[200],"bodyContains":["sitemapindex"]},
+  {"id":"c-20","group":"c","groupName":"博客服务状态","name":"robots.txt","method":"GET","url":"https://blog.xn--7qv00lf62c.top/robots.txt","expectStatus":[200],"bodyContains":["User-agent"]}
 ];

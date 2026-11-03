@@ -45,14 +45,16 @@ if (!ns) {
   console.log("KV 复用:", ns.id);
 }
 
-/* 3. 合并成单文件（Worker 里不能带相对 import，除非一起上传模块） */
-const workerSrc = fs.readFileSync(path.join(ROOT, "cf-worker", "worker.js"), "utf8").replace(/^import\s+\{\s*CHECKS\s*\}\s+from\s+["'][^"']+["'];?$/m, "");
+/* 3. 合并成单文件（Worker 单模块上传，不能留相对 import） */
+const workerSrc = fs
+  .readFileSync(path.join(ROOT, "cf-worker", "worker.js"), "utf8")
+  .replace(/^import\s+\{[^}]*\}\s+from\s+["']\.\/checks\.generated\.mjs["'];?$/m, "");
 const genSrc = fs.readFileSync(path.join(ROOT, "cf-worker", "checks.generated.mjs"), "utf8");
 const checksBlock = genSrc
   .split("\n")
-  .filter((l) => !l.startsWith("//"))
+  .filter((l) => !l.trim().startsWith("//"))
   .join("\n")
-  .replace(/export\s+const\s+CHECKS/, "const CHECKS");
+  .replace(/export\s+const\s+/g, "const ");
 const bundle = `${checksBlock}\n\n${workerSrc}`;
 fs.writeFileSync(path.join(ROOT, "cf-worker", "dist.mjs"), bundle);
 console.log("bundle:", bundle.length, "bytes");

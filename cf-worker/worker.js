@@ -13,11 +13,12 @@
  *   GET /            → 状态页（HTML）
  *   GET /status.json → 最新结果（机器可读）
  */
-import { CHECKS } from "./checks.generated.mjs";
+import { CHECKS, DEEP_CHECKS } from "./checks.generated.mjs";
 
 const TIMEOUT_MS = 10000;
 const CONCURRENCY = 10;
 const KV_KEY = "latest";
+const KV_KEY_DEEP = "deep";
 const HISTORY_PREFIX = "h:";
 
 /* ---------- 断言（与 monitor.mjs 同口径） ---------- */
@@ -97,11 +98,11 @@ async function pool(items, limit, fn) {
 }
 
 /* ---------- 主流程 ---------- */
-async function runChecks(env) {
+async function runChecks(env, list, kvKey, historyPrefix = null) {
   const at = new Date().toISOString();
-  const results = await pool(CHECKS, CONCURRENCY, probe);
+  const results = await pool(list, CONCURRENCY, probe);
 
-  const prevRaw = await env.MONITOR.get(KV_KEY);
+  const prevRaw = await env.MONITOR.get(kvKey);
   const prev = prevRaw ? JSON.parse(prevRaw) : null;
   const prevMap = new Map((prev?.results || []).map((r) => [r.id, r]));
 
@@ -121,23 +122,34 @@ async function runChecks(env) {
     results,
   };
 
-  await env.MONITOR.put(KV_KEY, JSON.stringify(snapshot));
-  /* 历史：只保留当天，粒度 1 分钟，够画曲线又不撑爆 KV */
-  await env.MONITOR.put(`${HISTORY_PREFIX}${at.slice(0, 10)}:${at.slice(11, 16)}`, JSON.stringify({ at, ok: snapshot.ok, total: snapshot.total, failed: failed.map((f) => f.id) }), {
-    expirationTtl: 60 * 60 * 24 * 14,
-  });
+  await env.MONITOR.put(kvKey, JSON.stringify(snapshot));
+  if (historyPrefix) {
+    await env.MONITOR.put(
+      `${HISTORY_PREFIX}${historyPrefix}:${at.slice(0, 10)}:${at.slice(11, 16)}`,
+      JSON.stringify({ at, ok: snapshot.ok, total: snapshot.total, failed: failed.map((f) => f.id) }),
+      { expirationTtl: 60 * 60 * 24 * 14 }
+    );
+  }
 
   return snapshot;
 }
 
+/* 每分钟跑 CORE；UTC 分钟数 % 10 == 4 那一轮顺带跑 DEEP */
+function shouldRunDeep(now) {
+  return now.getUTCMinutes() % 10 === 4;
+}
+
 /* ---------- 页面 ---------- */
 const GROUP_NAMES = { a: "网站服务", b: "密钥校验", c: "博客服务", d: "管理员平台", e: "密码校验", f: "各平台" };
+const ALL_CHECKS = [...CHECKS, ...DEEP_CHECKS];
 
-function renderHtml(snap) {
+function renderHtml(snap, deepSnap) {
   if (!snap) return "<h1>还没有数据</h1><p>Cron 尚未跑第一轮。</p>";
+  const all = [...(snap.results || []), ...((deepSnap && deepSnap.results) || [])];
+  const byId = new Map(all.map((r) => [r.id, r]));
+
   const groups = {};
-  for (const c of CHECKS) (groups[c.group] ||= []).push(c.id);
-  const byId = new Map(snap.results.map((r) => [r.id, r]));
+  for (const c of ALL_CHECKS) (groups[c.group] ||= []).push(c.id);
 
   const rows = Object.entries(groups)
     .map(([g, ids]) => {
@@ -152,12 +164,16 @@ function renderHtml(snap) {
     })
     .join("");
 
+  const deepLine = deepSnap
+    ? `深度巡检（每 10 分钟）：${deepSnap.at}　${deepSnap.failed === 0 ? `<span class="ok">全部 ${deepSnap.total} 项正常</span>` : `<span class="bad">${deepSnap.failed}/${deepSnap.total} 异常</span>`}`
+    : "深度巡检：还没跑过";
+
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>李海鼎.top 状态</title>
 <style>
 :root{color-scheme:light}
 body{font:15px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;margin:0;padding:28px;background:#f7f8fa;color:#1a1a1a}
 h1{font-size:20px;margin:0 0 6px}
-.sum{font-size:14px;color:#555;margin-bottom:18px}
+.sum{font-size:14px;color:#555;margin-bottom:4px}
 table{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.07);margin-bottom:20px}
 th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #eee;font-size:13.5px;vertical-align:top}
 th{background:#fafbfc;font-weight:600;color:#444}
@@ -166,35 +182,45 @@ h2{font-size:14px;margin:22px 0 8px;color:#444}
 .ok{color:#067647}.bad{color:#b42318}
 </style></head><body>
 <h1>李海鼎.top · 站点状态</h1>
-<div class="sum">最近一次检测：${snap.at}　|　
-${snap.failed === 0 ? `<span class="ok">全部 ${snap.total} 项正常</span>` : `<span class="bad">${snap.failed}/${snap.total} 项异常</span>`}
-　|　每分钟一次（Cloudflare Cron）</div>
-${snap.events?.length ? `<p class="bad">最近变化：${snap.events.map((e) => `${e.name} ${e.from}→${e.to}`).join("；")}</p>` : ""}
+<div class="sum">核心巡检（每分钟）：${snap.at}　|　
+${snap.failed === 0 ? `<span class="ok">全部 ${snap.total} 项正常</span>` : `<span class="bad">${snap.failed}/${snap.total} 项异常</span>`}</div>
+<div class="sum">${deepLine}</div>
+${[...(snap.events || []), ...((deepSnap && deepSnap.events) || [])].length
+      ? `<p class="bad">最近变化：${[...(snap.events || []), ...((deepSnap && deepSnap.events) || [])].map((e) => `${e.name} ${e.from}→${e.to}`).join("；")}</p>`
+      : ""}
 ${rows}
 </body></html>`;
 }
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runChecks(env));
+    const now = new Date();
+    ctx.waitUntil(
+      (async () => {
+        await runChecks(env, CHECKS, KV_KEY, "core");
+        if (shouldRunDeep(now)) await runChecks(env, DEEP_CHECKS, KV_KEY_DEEP, "deep");
+      })()
+    );
   },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/status.json") {
-      const raw = await env.MONITOR.get(KV_KEY);
-      return new Response(raw || '{"error":"no data yet"}', {
+      const [coreRaw, deepRaw] = await Promise.all([env.MONITOR.get(KV_KEY), env.MONITOR.get(KV_KEY_DEEP)]);
+      return new Response(JSON.stringify({ core: coreRaw ? JSON.parse(coreRaw) : null, deep: deepRaw ? JSON.parse(deepRaw) : null }), {
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" },
       });
     }
     if (url.pathname === "/run") {
-      /* 手动催一轮，方便调试 */
-      const snap = await runChecks(env);
-      return new Response(JSON.stringify({ ok: snap.failed === 0, failed: snap.failed, total: snap.total }), {
+      /* 手动催一轮，方便调试；?deep=1 连深度一起跑 */
+      const deep = url.searchParams.get("deep") === "1";
+      const core = await runChecks(env, CHECKS, KV_KEY, "core");
+      const deepSnap = deep ? await runChecks(env, DEEP_CHECKS, KV_KEY_DEEP, "deep") : null;
+      return new Response(JSON.stringify({ core: { ok: core.ok, total: core.total, failed: core.failed }, deep: deepSnap && { ok: deepSnap.ok, total: deepSnap.total, failed: deepSnap.failed } }), {
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
-    const raw = await env.MONITOR.get(KV_KEY);
-    return new Response(renderHtml(raw ? JSON.parse(raw) : null), {
+    const [coreRaw, deepRaw] = await Promise.all([env.MONITOR.get(KV_KEY), env.MONITOR.get(KV_KEY_DEEP)]);
+    return new Response(renderHtml(coreRaw ? JSON.parse(coreRaw) : null, deepRaw ? JSON.parse(deepRaw) : null), {
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
     });
   },

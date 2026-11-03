@@ -11,36 +11,43 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "checks.json"), "utf8"));
-const core = cfg.checks.filter((c) => c.tier === "core");
 
-const body = core
-  .map((c) =>
-    JSON.stringify({
-      id: c.id,
-      group: c.group,
-      groupName: c.groupName,
-      name: c.name,
-      method: c.method || "GET",
-      url: c.url,
-      expectStatus: c.expectStatus,
-      jsonEquals: c.jsonEquals,
-      jsonPathExists: c.jsonPathExists,
-      jsonLength: c.jsonLength,
-      bodyContains: c.bodyContains,
-      onlyWhenStatus: c.onlyWhenStatus,
-      jsonBody: c.jsonBody,
-    })
-  )
-  .join(",\n  ");
+const pick = (list) =>
+  list
+    .map((c) =>
+      JSON.stringify({
+        id: c.id,
+        group: c.group,
+        groupName: c.groupName,
+        name: c.name,
+        method: c.method || "GET",
+        url: c.url,
+        expectStatus: c.expectStatus,
+        jsonEquals: c.jsonEquals,
+        jsonPathExists: c.jsonPathExists,
+        jsonLength: c.jsonLength,
+        bodyContains: c.bodyContains,
+        onlyWhenStatus: c.onlyWhenStatus,
+        jsonBody: c.jsonBody,
+      })
+    )
+    .join(",\n  ");
+
+const core = cfg.checks.filter((c) => c.tier === "core");
+const deep = cfg.checks.filter((c) => c.tier === "deep");
 
 const out = `// ⚠️ 本文件由 sync-worker-checks.mjs 自动生成，别手改。
-// 真相源：仓库根目录 checks.json（tier=core 的项）
+// 真相源：仓库根目录 checks.json
 // 生成时间：${new Date().toISOString()}
-// 检查项数：${core.length}
+// CORE ${core.length} 项（每分钟） / DEEP ${deep.length} 项（每 10 分钟那一轮顺带跑）
 export const CHECKS = [
-  ${body}
+  ${pick(core)}
+];
+
+export const DEEP_CHECKS = [
+  ${pick(deep)}
 ];
 `;
 
 fs.writeFileSync(path.join(ROOT, "cf-worker", "checks.generated.mjs"), out);
-console.log(`已生成 cf-worker/checks.generated.mjs（${core.length} 项）`);
+console.log(`已生成 cf-worker/checks.generated.mjs：CORE ${core.length} 项 / DEEP ${deep.length} 项`);
