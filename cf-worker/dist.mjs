@@ -122,10 +122,10 @@ function judge(check, res) {
   return problems;
 }
 
-async function probe(check) {
+async function probe(check, attempts = 2) {
   const t0 = Date.now();
   let res = { status: 0, text: "", err: "未执行" };
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const init = {
         method: check.method || "GET",
@@ -144,7 +144,7 @@ async function probe(check) {
     }
     const problems = judge(check, res);
     if (!problems.length) return { id: check.id, name: check.name, ok: true, status: res.status, ms: Date.now() - t0, problems: [] };
-    if (attempt === 2) return { id: check.id, name: check.name, ok: false, status: res.status, ms: Date.now() - t0, problems };
+    if (attempt === attempts) return { id: check.id, name: check.name, ok: false, status: res.status, ms: Date.now() - t0, problems };
     await new Promise((r) => setTimeout(r, 800));
   }
 }
@@ -164,9 +164,9 @@ async function pool(items, limit, fn) {
 }
 
 /* ---------- 主流程 ---------- */
-async function runChecks(env, list, kvKey, historyPrefix = null) {
+async function runChecks(env, list, kvKey, historyPrefix = null, attempts = 2) {
   const at = new Date().toISOString();
-  const results = await pool(list, CONCURRENCY, probe);
+  const results = await pool(list, CONCURRENCY, (c) => probe(c, attempts));
 
   const prevRaw = await env.MONITOR.get(kvKey);
   const prev = prevRaw ? JSON.parse(prevRaw) : null;
@@ -258,13 +258,39 @@ ${rows}
 </body></html>`;
 }
 
+/* ★ Cloudflare 免费版单次 invocation 最多 50 个 subrequest。
+   core 31 + deep 28 = 59 会直接撞墙（实测报 "Too many subrequests by single Worker invocation"）。
+   所以 deep 那一轮只跑 deep（28）+ 4 项核心可用性 = 32，并且不重试。 */
+const CRITICAL_IDS = ["a-01", "a-03", "c-01", "d-01"];
+
 export default {
   async scheduled(event, env, ctx) {
     const now = new Date();
     ctx.waitUntil(
       (async () => {
-        await runChecks(env, CHECKS, KV_KEY, "core");
-        if (shouldRunDeep(now)) await runChecks(env, DEEP_CHECKS, KV_KEY_DEEP, "deep");
+        if (shouldRunDeep(now)) {
+          /* deep 轮：跑深度 28 项 + 4 项核心，然后把核心那 4 项合并回 latest */
+          const critical = CHECKS.filter((c) => CRITICAL_IDS.includes(c.id));
+          const r = await runChecks(env, [...critical, ...DEEP_CHECKS], KV_KEY_DEEP, "deep", 1);
+
+          const prevRaw = await env.MONITOR.get(KV_KEY);
+          const base = prevRaw ? JSON.parse(prevRaw) : { results: [] };
+          const ids = new Set(critical.map((c) => c.id));
+          const merged = [...(base.results || []).filter((x) => !ids.has(x.id)), ...r.results.filter((x) => ids.has(x.id))];
+          await env.MONITOR.put(
+            KV_KEY,
+            JSON.stringify({
+              at: r.at,
+              total: merged.length,
+              ok: merged.filter((x) => x.ok).length,
+              failed: merged.filter((x) => !x.ok).length,
+              events: [],
+              results: merged,
+            })
+          );
+        } else {
+          await runChecks(env, CHECKS, KV_KEY, "core");
+        }
       })()
     );
   },

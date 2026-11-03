@@ -1,6 +1,6 @@
 // ⚠️ 本文件由 sync-worker-checks.mjs 自动生成，别手改。
 // 真相源：仓库根目录 checks.json
-// 生成时间：2026-11-03T12:57:12.020Z
+// 生成时间：2026-11-03T13:06:23.005Z
 // CORE 31 项（每分钟） / DEEP 28 项（每 10 分钟那一轮顺带跑）
 export const CHECKS = [
   {"id":"a-01","group":"a","groupName":"网站服务状态","name":"入口站首页（根域）","method":"GET","url":"https://xn--7qv00lf62c.top/","expectStatus":[200],"bodyContains":["李海鼎"]},

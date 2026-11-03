@@ -35,6 +35,11 @@ GitHub 会把它节流到 5–15 分钟，高峰期还会直接丢。
 
 > 实测：Cron 配好后约 **10 分钟**才第一次点火（`created_on` 12:39 → 首轮 12:49），
 > 之后每轮 31 项全绿、单轮 150–350ms。
+>
+> **一个坑**：Cloudflare 免费版单次 invocation 最多 **50 个 subrequest**。
+> 核心 31 + 深度 28 = 59 会直接撞墙（`Too many subrequests by single Worker invocation`）。
+> 所以「每 10 分钟」那一轮改成：只跑深度 28 项 + 4 项核心可用性（a-01/a-03/c-01/d-01）= 32 项，
+> 并且不重试；其余 9 分钟照常跑核心 31 项。
 
 两个引擎跑同一份清单，互为备份：CF 挂了下 GitHub 还在，GitHub 定时不灵了 CF 还在。
 
