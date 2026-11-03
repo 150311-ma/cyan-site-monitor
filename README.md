@@ -9,30 +9,40 @@
 
 ---
 
-## 一、检测频率（先说清楚一件事）
+## 一、检测频率（先说清楚两件事）
 
-**GitHub Actions 的定时任务最短粒度是 5 分钟。** `cron: "*/1 * * * *"` 写上去也不会真每分钟跑，
+### 1. GitHub Actions 的 cron 够不着「每分钟」
+
+**GitHub Actions 的定时任务最短粒度是 5 分钟**，`cron: "*/1 * * * *"` 写上去也不会真每分钟跑，
 GitHub 会把它节流到 5–15 分钟，高峰期还会直接丢。
 
-所以这里的做法是：
+所以 GitHub 这边用的是「cron 每 5 分钟唤起一次 → job 里连跑 5 轮 → 每轮间隔 60 秒」：
 
-```
-cron 每 5 分钟唤起一次  →  一个 job 里连跑 5 轮  →  每轮间隔 60 秒
-```
-
-效果是这两档：
-
-| 档位 | 覆盖范围 | 实际频率 | 用哪个 workflow |
+| 档位 | 覆盖范围 | 实际频率 | 用哪个 |
 |---|---|---|---|
-| 核心巡检 | 31 项只读探测（6 大类全覆盖） | **约每分钟一次** | `uptime-1min.yml` |
+| 核心巡检 | 31 项只读探测（6 大类全覆盖） | 约每分钟一次 | `uptime-1min.yml` |
 | 深度巡检 | 28 项含 POST 鉴权/校验 | 10 分钟一次 | `deep-10min.yml` |
 
-代价：每分钟那档每个 job 占约 5 分钟 Actions 额度，一天约 1440 分钟。
-**公开仓库的 Actions 分钟数不计量**，所以免费。
+### 2. 真正准时的引擎是 Cloudflare Cron
 
-> 为什么 POST 类不进每分钟：`POST /api/auth/login` 每调一次就是一次失败登录计数
-> （站点上限是 10 次/10 分钟/IP 锁 10 分钟），每分钟打等于把自己锁死。
-> 所以写操作统一放 10 分钟那档。
+实测发现 **GitHub 的 schedule 建仓后一小时都没触发过一次**（`gh run list` 里只有 workflow_dispatch）。
+这种「定时器不点火」的毛病靠等是没用的，所以主力换成了 **Cloudflare Worker + Cron Trigger**：
+
+- 部署脚本 `deploy-worker.mjs`，源文件 `cf-worker/`
+- Cron：`* * * * *` —— **真·每分钟**
+- 结果写 Cloudflare KV，带 `/status.json` 和一张状态页
+- 检查清单同样来自 `checks.json`（`sync-worker-checks.mjs` 生成 `cf-worker/checks.generated.mjs`，不手抄第二份）
+
+> 实测：Cron 配好后约 **10 分钟**才第一次点火（`created_on` 12:39 → 首轮 12:49），
+> 之后每轮 31 项全绿、单轮 150–350ms。
+
+两个引擎跑同一份清单，互为备份：CF 挂了下 GitHub 还在，GitHub 定时不灵了 CF 还在。
+
+> **为什么 POST 类不进每分钟**：`POST /api/auth/login` 每调一次就是一次失败登录计数
+> （站点上限 10 次/10 分钟/IP，超了锁 10 分钟），每分钟打等于把自己锁死。
+> 所以带副作用的校验（登录密码、伪激活码验签、各写接口闸门）只在 10 分钟那档跑。
+> **当前状态**：GitHub 的定时器还没点火，所以这 28 项暂时只能手动跑
+> （`node monitor.mjs --tier deep`，或仓库 Actions 页点 Run workflow）。
 
 ---
 
