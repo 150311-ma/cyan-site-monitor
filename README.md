@@ -1,11 +1,19 @@
 # 李海鼎.top 站点 uptime 监控
 
-用 GitHub Actions 给 **李海鼎.top**（入口站 / 青柠博客 / 网盘）做可用性 + 接口健康监控。
+> ## 👉 状态页：<https://xn--7qv00lf62c.top/status>
+> 打不开就用这个（同一个页面，走博客域）：<https://blog.xn--7qv00lf62c.top/_uptime>
+> 机器可读：<https://xn--7qv00lf62c.top/status.json>
+
+用 GitHub Actions + Cloudflare Worker 给 **李海鼎.top**（入口站 / 青柠博客 / 网盘）做可用性 + 接口健康监控。
 失败自动开 Issue，恢复自动关单，不刷屏。
 
 - 入口站：<https://xn--7qv00lf62c.top>
 - 博客：<https://blog.xn--7qv00lf62c.top>
 - 网盘：<https://pan.xn--7qv00lf62c.top>
+
+> **为什么状态页挂在 `/status` 而不是 `status.李海鼎.top`**：
+> 子域要自己加一条 DNS 记录才能解析，当时没加，所以直接甩不掉；改成
+> Cloudflare Workers Routes 挂路径（`xn--7qv00lf62c.top/status*`）就不需要动 DNS 了。
 
 ---
 
@@ -130,3 +138,30 @@ node monitor.mjs --tier core --rounds 5 --interval 60   # 模拟线上每分钟�
 - `history/YYYY-MM-DD.jsonl`：每轮一行，含每项状态码与耗时（以后想画曲线直接读它）
 
 只在**状态翻转**时 commit，不会每分钟污染提交历史。
+
+---
+
+## 七、备选：UptimeFlare（已经备好，还差一步）
+
+用户想要「GitHub 上的成熟项目」。最合适的是 [UptimeFlare](https://github.com/lyc8503/UptimeFlare)
+（3.9k stars，Apache-2.0，Cloudflare Workers + Pages，1 分钟间隔，带响应时间曲线和 90 天历史条）。
+
+已经做的事：
+
+- fork 到 <https://github.com/150311-ma/UptimeFlare>
+- `uptime.config.ts` 写好了 59 条监控、6 个分组（由 `gen-uptimeflare-config.mjs` 从 `checks.json` 生成，
+  本地副本见本仓库 `uptimeflare.config.ts`）
+
+**卡在哪**：UptimeFlare 从 2026-01 迁到了 **Cloudflare D1**，而手上这个 Cloudflare Token
+没有 D1 权限（`GET /accounts/.../d1/database` → `Authentication error`）。没 D1 就建不了表，页面起不来。
+
+要上线只差：
+
+1. 在 Cloudflare 面板建一个 D1 数据库（名字随意，比如 `uptimeflare`），
+2. 给 Token 补上 **D1 Edit** + **Pages Edit** 权限（或新建一个全权限 Token），
+3. 在 Pages 里连上 `150311-ma/UptimeFlare` 这个仓库（构建交给 Cloudflare 云端，不占 GitHub Actions）。
+
+之前**没选**这条路的原因也说清楚：GitHub Actions 的 `schedule` 在这个账号上实测
+**两小时触发 0 次**，所以任何「靠 Actions 定时」的监控（Upptime 之类）在这儿都是死的。
+UptimeFlare 的定时跑在 Cloudflare Cron 上，不受这个影响，所以它才是能用的那个。
+
