@@ -941,6 +941,36 @@
       "tier": "deep",
       "note": "写操作只验「闸门在位」：未登录被拦，不会真的写任何数据",
       "jsonBody": {}
+    },
+    {
+      "id": "c-19",
+      "group": "c",
+      "groupName": "博客服务状态",
+      "name": "站点地图 /sitemap-index.xml",
+      "method": "GET",
+      "url": "https://blog.xn--7qv00lf62c.top/sitemap-index.xml",
+      "expectStatus": [
+        200
+      ],
+      "bodyContains": [
+        "sitemapindex"
+      ],
+      "tier": "deep"
+    },
+    {
+      "id": "c-20",
+      "group": "c",
+      "groupName": "博客服务状态",
+      "name": "robots.txt",
+      "method": "GET",
+      "url": "https://blog.xn--7qv00lf62c.top/robots.txt",
+      "expectStatus": [
+        200
+      ],
+      "bodyContains": [
+        "User-agent"
+      ],
+      "tier": "deep"
     }
   ]
 }
